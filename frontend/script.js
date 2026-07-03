@@ -71,7 +71,10 @@ async function sendMessage() {
             })
         });
 
-        if (!response.ok) throw new Error('Query failed');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => null);
+            throw new Error(errorData?.detail || `Query failed (${response.status})`);
+        }
 
         const data = await response.json();
         
@@ -115,25 +118,35 @@ function addMessage(content, type, sources = null, isWelcome = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}${isWelcome ? ' welcome-message' : ''}`;
     messageDiv.id = `message-${messageId}`;
-    
+
     // Convert markdown to HTML for assistant messages
     const displayContent = type === 'assistant' ? marked.parse(content) : escapeHtml(content);
-    
+
     let html = `<div class="message-content">${displayContent}</div>`;
-    
+
     if (sources && sources.length > 0) {
+        // Render sources as clickable links
+        const sourceItems = sources.map((source, idx) => {
+            const title = source.title || source;
+            const lesson = source.lesson;
+            const link = source.link;
+            const label = lesson ? `${title} - Lesson ${lesson}` : title;
+            const url = link || `https://developer.anthropic.com`;
+            return `<a href="${url}" target="_blank" rel="noopener" class="source-link">${idx + 1}. ${escapeHtml(label)}</a>`;
+        }).join('');
+
         html += `
-            <details class="sources-collapsible">
-                <summary class="sources-header">Sources</summary>
-                <div class="sources-content">${sources.join(', ')}</div>
+            <details class="sources-collapsible" open>
+                <summary class="sources-header">Sources (${sources.length})</summary>
+                <div class="sources-content">${sourceItems}</div>
             </details>
         `;
     }
-    
+
     messageDiv.innerHTML = html;
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    
+
     return messageId;
 }
 

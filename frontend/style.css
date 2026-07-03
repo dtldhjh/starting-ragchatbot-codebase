@@ -220,29 +220,75 @@ header h1 {
 
 /* Collapsible Sources */
 .sources-collapsible {
-    margin-top: 0.5rem;
-    font-size: 0.75rem;
+    margin-top: 0.75rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
 }
 
 .sources-collapsible summary {
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
     user-select: none;
-    font-weight: 500;
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sources-collapsible summary::-webkit-details-marker {
+    display: none;
+}
+
+.sources-collapsible summary::before {
+    content: '🔗';
+    font-size: 0.9rem;
 }
 
 .sources-collapsible summary:hover {
-    color: var(--text-primary);
+    color: var(--primary-hover);
 }
 
 .sources-collapsible[open] summary {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .sources-content {
-    padding: 0 0.5rem 0.25rem 1.5rem;
-    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.source-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--background);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+.source-link:hover {
+    border-color: var(--primary-color);
+    background: var(--surface-hover);
+    transform: translateX(2px);
+}
+
+.source-link::before {
+    content: '📄';
+    font-size: 0.85rem;
 }
 
 /* Markdown formatting styles */
