@@ -1,7 +1,7 @@
 #!/bin/bash
 API_KEY="${AI_API_KEY}"
 BASE_URL="${AI_BASE_URL:-https://api.openai.com/v1}"
-MODEL="${AI_MODEL:-meta/llama-3.1-8b-instruct}"
+MODEL="${AI_MODEL:-nvidia/llama-3.1-nemotron-70b-instruct}"
 DIFF=$(echo "$DIFF_BASE64" | base64 -d)
 
 if [ -z "$API_KEY" ] || [ -z "$DIFF" ]; then
@@ -15,14 +15,36 @@ cat > /tmp/review.py << 'PYEOF'
 import json, os
 with open('/tmp/diff.txt') as f:
     diff = f.read()
+
+SYSTEM_PROMPT = """You are an expert code reviewer reviewing a GitHub PR diff.
+
+IMPORTANT CONTEXT:
+- This is a GitHub Actions workflow
+- Secrets are accessed via ${{ secrets.SECRET_NAME }} syntax - these are SECURE and not plain text
+- Environment variables like ${{ env.VAR }} are also secure
+- Focus on REAL issues only, not hypothetical ones
+
+REVIEW GUIDELINES:
+1. **Bugs**: Logic errors, null pointer issues, off-by-one errors
+2. **Security**: Actual vulnerabilities (SQL injection, XSS, hardcoded credentials)
+3. **Performance**: Obvious bottlenecks, N+1 queries, missing indexes
+4. **Code Quality**: Unclear naming, missing error handling, duplicated code
+
+DO NOT flag:
+- GitHub secrets usage (they are secure by design)
+- Style preferences (unless extreme)
+- Theoretical issues without evidence
+
+Be concise and actionable. Only mention real problems."""
+
 payload = {
-    'model': os.environ.get('MODEL', 'meta/llama-3.1-8b-instruct'),
+    'model': os.environ.get('MODEL', 'nvidia/llama-3.1-nemotron-70b-instruct'),
     'messages': [
-        {'role': 'system', 'content': 'You are a senior code reviewer. Review the git diff for bugs, security issues, and improvements. Be concise.'},
-        {'role': 'user', 'content': 'Review this diff:\n\n' + diff}
+        {'role': 'system', 'content': SYSTEM_PROMPT},
+        {'role': 'user', 'content': 'Review this PR diff:\n\n' + diff}
     ],
-    'temperature': 0.3,
-    'max_tokens': 2000
+    'temperature': 0.2,
+    'max_tokens': 3000
 }
 print(json.dumps(payload))
 PYEOF
