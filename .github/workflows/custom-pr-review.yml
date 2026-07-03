@@ -6,6 +6,7 @@ on:
     types: [opened, synchronize]
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: review-${{ github.event.pull_request.number || github.ref }}
