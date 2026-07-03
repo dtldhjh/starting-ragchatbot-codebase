@@ -4,9 +4,12 @@ name: Custom PR Review (Multi-Model)
 on:
   pull_request:
     types: [opened, synchronize]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  group: review-${{ github.event.pull_request.number }}
+  group: review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -21,106 +24,69 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Get PR diff
+      - name: Get diff
         id: diff
         run: |
-          git fetch origin ${{ github.event.pull_request.base.ref }}
-          DIFF=$(git diff origin/${{ github.event.pull_request.base.ref }}...HEAD)
-          echo "diff<<EOF" >> $GITHUB_OUTPUT
-          echo "$DIFF" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin ${{ github.event.pull_request.base.ref }}
+            DIFF=$(git diff origin/${{ github.event.pull_request.base.ref }}...HEAD | head -5000)
+          else
+            DIFF=$(git diff HEAD~1 HEAD | head -5000)
+          fi
+          # Use base64 to avoid escaping issues
+          echo "diff=$(echo "$DIFF" | base64 -w 0)" >> $GITHUB_OUTPUT
 
       - name: AI Review
-        id: review
-        env:
-          API_KEY: ${{ secrets.AI_API_KEY }}
-          BASE_URL: ${{ secrets.AI_BASE_URL }}
-          MODEL: ${{ secrets.AI_MODEL }}
-          GITHUB_STEP_DIFF: ${{ steps.diff.outputs.diff }}
+        id: ai_review
         run: |
-          python3 << 'PYEOF'
-          import os
-          import json
-          import urllib.request
-          import urllib.error
+          API_KEY="${{ secrets.AI_API_KEY }}"
+          BASE_URL="${{ secrets.AI_BASE_URL || 'https://api.openai.com/v1' }}"
+          MODEL="${{ secrets.AI_MODEL || 'meta/llama-3.1-8b-instruct' }}"
+          DIFF=$(echo "${{ steps.diff.outputs.diff }}" | base64 -d)
 
-          API_KEY = os.getenv("API_KEY", "")
-          BASE_URL = os.getenv("BASE_URL", "https://api.openai.com/v1")
-          MODEL = os.getenv("MODEL", "meta/llama-3.1-8b-instruct")
-          DIFF = os.environ.get("GITHUB_STEP_DIFF", "")
+          if [ -z "$API_KEY" ] || [ -z "$DIFF" ]; then
+            echo "Skipping: no API key or empty diff"
+            exit 0
+          fi
 
-          if not API_KEY:
-              print("No API key configured, skipping review")
-              exit(0)
-
-          if not DIFF or len(DIFF) < 10:
-              print("No significant changes to review")
-              exit(0)
-
-          # Truncate diff if too long (keep last 50k chars)
-          if len(DIFF) > 50000:
-              DIFF = DIFF[-50000:]
-
-          SYSTEM_PROMPT = """You are a senior code reviewer. Review the following git diff and provide:
-          1. **Bugs** - potential bugs or errors
-          2. **Security** - security issues
-          3. **Improvements** - code quality suggestions
-          4. **Positive** - what's done well
-
-          Be concise. Use bullet points. Only mention real issues, not style preferences."""
-
-          payload = {
-              "model": MODEL,
-              "messages": [
-                  {"role": "system", "content": SYSTEM_PROMPT},
-                  {"role": "user", "content": f"Review this PR diff:\n\n{DIFF}"}
+          RESPONSE=$(curl -s -X POST "$BASE_URL/chat/completions" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_KEY" \
+            -d "{
+              \"model\": \"$MODEL\",
+              \"messages\": [
+                {\"role\": \"system\", \"content\": \"You are a senior code reviewer. Review the git diff for bugs, security issues, and improvements. Be concise.\"},
+                {\"role\": \"user\", \"content\": \"Review this diff:\\n\\n$DIFF\"}
               ],
-              "temperature": 0.3,
-              "max_tokens": 2000
-          }
+              \"temperature\": 0.3,
+              \"max_tokens\": 2000
+            }")
 
-          url = f"{BASE_URL.rstrip('/')}/chat/completions"
-          headers = {
-              "Content-Type": "application/json",
-              "Authorization": f"Bearer {API_KEY}"
-          }
+          # Debug: print first 500 chars of response
+          echo "Response preview: ${RESPONSE:0:500}"
 
-          req = urllib.request.Request(url,
-              data=json.dumps(payload).encode(),
-              headers=headers,
-              method="POST"
-          )
+          REVIEW=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data.get('choices',[{}])[0].get('message',{}).get('content','Error: no response'))")
 
-          try:
-              with urllib.request.urlopen(req, timeout=60) as resp:
-                  result = json.loads(resp.read().decode())
-                  review = result["choices"][0]["message"]["content"]
-                  print(review)
-          except urllib.error.HTTPError as e:
-              print(f"API error: {e.code} - {e.read().decode()}")
-              exit(1)
-          except Exception as e:
-              print(f"Error: {e}")
-              exit(1)
-          PYEOF
+          # Write to file for next step
+          echo "$REVIEW" > /tmp/review.txt
+          echo "review=true" >> $GITHUB_OUTPUT
 
-      - name: Post Review Comment
-        if: steps.review.outputs.review != '' && steps.review.outputs.review != 'No significant changes to review'
+      - name: Post comment
+        if: steps.ai_review.outputs.review == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const review = `${{ steps.review.outputs.review }}`;
-            if (review && !review.includes('No significant changes')) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: `## 🤖 AI Code Review\n\n${review}`
-              });
+            const fs = require('fs');
+            const review = fs.readFileSync('/tmp/review.txt', 'utf8');
+            if (review.trim()) {
+              const issueNumber = context.issue.number;
+              if (issueNumber) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  body: `## 🤖 AI Code Review\n\n${review}`
+                });
+              }
             }
