@@ -49,21 +49,25 @@ jobs:
             exit 0
           fi
 
-          # Escape diff for JSON
-          ESCAPED_DIFF=$(echo "$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+          # Build JSON payload using python3 to avoid escaping issues
+          PAYLOAD=$(python3 -c "
+import json
+payload = {
+    'model': '$MODEL',
+    'messages': [
+        {'role': 'system', 'content': 'You are a senior code reviewer. Review the git diff for bugs, security issues, and improvements. Be concise.'},
+        {'role': 'user', 'content': 'Review this diff:\\n\\n$DIFF'}
+    ],
+    'temperature': 0.3,
+    'max_tokens': 2000
+}
+print(json.dumps(payload))
+")
 
           RESPONSE=$(curl -s -X POST "$BASE_URL/chat/completions" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $API_KEY" \
-            -d "{
-              \"model\": \"$MODEL\",
-              \"messages\": [
-                {\"role\": \"system\", \"content\": \"You are a senior code reviewer. Review the git diff for bugs, security issues, and improvements. Be concise.\"},
-                {\"role\": \"user\", \"content\": \"Review this diff:\\n\\n\" + $ESCAPED_DIFF}
-              ],
-              \"temperature\": 0.3,
-              \"max_tokens\": 2000
-            }")
+            -d "$PAYLOAD")
 
           # Debug: print first 500 chars of response
           echo "Response preview: ${RESPONSE:0:500}"
