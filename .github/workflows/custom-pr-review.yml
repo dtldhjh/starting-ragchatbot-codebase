@@ -4,6 +4,8 @@ name: Custom PR Review (Multi-Model)
 on:
   pull_request:
     types: [opened, synchronize]
+  push:
+    branches: [main]
 
 concurrency:
   group: review-${{ github.event.pull_request.number }}
