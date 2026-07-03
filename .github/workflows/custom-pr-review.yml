@@ -31,8 +31,12 @@ jobs:
       - name: Get PR diff
         id: diff
         run: |
-          git fetch origin ${{ github.event.pull_request.base.ref }}
-          DIFF=$(git diff origin/${{ github.event.pull_request.base.ref }}...HEAD)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin ${{ github.event.pull_request.base.ref }}
+            DIFF=$(git diff origin/${{ github.event.pull_request.base.ref }}...HEAD)
+          else
+            DIFF=$(git diff HEAD~1 HEAD)
+          fi
           echo "diff<<EOF" >> $GITHUB_OUTPUT
           echo "$DIFF" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
