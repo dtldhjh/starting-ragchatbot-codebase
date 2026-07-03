@@ -38,50 +38,12 @@ jobs:
 
       - name: AI Review
         id: ai_review
-        run: |
-          API_KEY="${{ secrets.AI_API_KEY }}"
-          BASE_URL="${{ secrets.AI_BASE_URL || 'https://api.openai.com/v1' }}"
-          MODEL="${{ secrets.AI_MODEL || 'meta/llama-3.1-8b-instruct' }}"
-          DIFF=$(echo "${{ steps.diff.outputs.diff }}" | base64 -d)
-
-          if [ -z "$API_KEY" ] || [ -z "$DIFF" ]; then
-            echo "Skipping: no API key or empty diff"
-            exit 0
-          fi
-
-          # Write diff to temp file to avoid escaping issues
-          echo "$DIFF" > /tmp/diff.txt
-
-          # Build JSON payload using python3
-          PAYLOAD=$(python3 -c "
-import json
-with open('/tmp/diff.txt') as f:
-    diff = f.read()
-payload = {
-    'model': '$MODEL',
-    'messages': [
-        {'role': 'system', 'content': 'You are a senior code reviewer. Review the git diff for bugs, security issues, and improvements. Be concise.'},
-        {'role': 'user', 'content': 'Review this diff:\n\n' + diff}
-    ],
-    'temperature': 0.3,
-    'max_tokens': 2000
-}
-print(json.dumps(payload))
-")
-
-          RESPONSE=$(curl -s -X POST "$BASE_URL/chat/completions" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $API_KEY" \
-            -d "$PAYLOAD")
-
-          # Debug: print first 500 chars of response
-          echo "Response preview: ${RESPONSE:0:500}"
-
-          REVIEW=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data.get('choices',[{}])[0].get('message',{}).get('content','Error: no response'))")
-
-          # Write to file for next step
-          echo "$REVIEW" > /tmp/review.txt
-          echo "review=true" >> $GITHUB_OUTPUT
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          DIFF_BASE64: ${{ steps.diff.outputs.diff }}
+        run: bash .github/scripts/ai-review.sh
 
       - name: Post comment
         if: steps.ai_review.outputs.review == 'true'
