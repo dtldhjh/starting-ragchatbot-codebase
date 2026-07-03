@@ -1,7 +1,7 @@
 #!/bin/bash
 API_KEY="${AI_API_KEY}"
 BASE_URL="${AI_BASE_URL:-https://api.openai.com/v1}"
-MODEL="${AI_MODEL:-nvidia/llama-3.1-nemotron-70b-instruct}"
+MODEL="${AI_MODEL:-meta/llama-3.1-8b-instruct}"
 DIFF=$(echo "$DIFF_BASE64" | base64 -d)
 
 if [ -z "$API_KEY" ] || [ -z "$DIFF" ]; then
@@ -38,7 +38,7 @@ DO NOT flag:
 Be concise and actionable. Only mention real problems."""
 
 payload = {
-    'model': os.environ.get('MODEL', 'nvidia/llama-3.1-nemotron-70b-instruct'),
+    'model': os.environ.get('MODEL', 'meta/llama-3.1-8b-instruct'),
     'messages': [
         {'role': 'system', 'content': SYSTEM_PROMPT},
         {'role': 'user', 'content': 'Review this PR diff:\n\n' + diff}
