@@ -64,15 +64,7 @@ jobs:
           # Debug: print first 500 chars of response
           echo "Response preview: ${RESPONSE:0:500}"
 
-          REVIEW=$(echo "$RESPONSE" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    print(data['choices'][0]['message']['content'])
-except Exception as e:
-    print(f'Error parsing response: {e}', file=sys.stderr)
-    sys.exit(1)
-")
+          REVIEW=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data.get('choices',[{}])[0].get('message',{}).get('content','Error: no response'))")
 
           # Write to file for next step
           echo "$REVIEW" > /tmp/review.txt
