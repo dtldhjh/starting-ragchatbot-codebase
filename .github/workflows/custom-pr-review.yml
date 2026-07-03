@@ -41,6 +41,7 @@ jobs:
           API_KEY: ${{ secrets.AI_API_KEY }}
           BASE_URL: ${{ secrets.AI_BASE_URL }}
           MODEL: ${{ secrets.AI_MODEL }}
+          GITHUB_STEP_DIFF: ${{ steps.diff.outputs.diff }}
         run: |
           python3 << 'PYEOF'
           import os
@@ -107,8 +108,6 @@ jobs:
               print(f"Error: {e}")
               exit(1)
           PYEOF
-        env:
-          GITHUB_STEP_DIFF: ${{ steps.diff.outputs.diff }}
 
       - name: Post Review Comment
         if: steps.review.outputs.review != '' && steps.review.outputs.review != 'No significant changes to review'
